@@ -1,0 +1,42 @@
+{
+    "name": "ua/laravel-okta-oidc",
+    "description": "Reusable Okta OIDC authentication package for Laravel applications.",
+    "type": "library",
+    "version": "1.0.0",
+    "license": "proprietary",
+    "require": {
+        "php": "^8.2",
+        "illuminate/contracts": "^11.0|^12.0",
+        "illuminate/http": "^11.0|^12.0",
+        "illuminate/routing": "^11.0|^12.0",
+        "illuminate/support": "^11.0|^12.0",
+        "laravel/socialite": "^5.16",
+        "socialiteproviders/manager": "^4.7",
+        "socialiteproviders/okta": "^4.5"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0|^10.0",
+        "phpunit/phpunit": "^10.5|^11.0",
+        "phpstan/phpstan": "^2.1",
+        "larastan/larastan": "^3.9"
+    },
+    "autoload": {
+        "psr-4": {
+            "Ua\\LaravelOktaOidc\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Ua\\LaravelOktaOidc\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Ua\\LaravelOktaOidc\\OktaOidcServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
