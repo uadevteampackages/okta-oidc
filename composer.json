@@ -1,9 +1,8 @@
 {
-    "name": "ua/laravel-okta-oidc",
+    "name": "ua/okta-oidc",
     "description": "Reusable Okta OIDC authentication package for Laravel applications.",
     "type": "library",
-    "version": "1.0.0",
-    "license": "proprietary",
+    "license": "MIT",
     "require": {
         "php": "^8.2",
         "illuminate/contracts": "^11.0|^12.0",
