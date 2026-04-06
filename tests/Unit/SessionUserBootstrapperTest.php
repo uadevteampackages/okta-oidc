@@ -1,175 +1,119 @@
 <?php
 
-namespace Ua\LaravelOktaOidc\Tests\Unit;
-
 use Illuminate\Http\Request;
 use Ua\LaravelOktaOidc\Resolvers\SessionUserBootstrapper;
-use Ua\LaravelOktaOidc\Tests\TestCase;
 
-class SessionUserBootstrapperTest extends TestCase
-{
-    private SessionUserBootstrapper $bootstrapper;
+beforeEach(function () {
+    $this->bootstrapper = new SessionUserBootstrapper;
+});
 
-    protected function setUp(): void
-    {
-        parent::setUp();
+it('stores method-based claims in session', function () {
+    config()->set('okta-oidc.session_claims', [
+        'okta.name' => 'getName',
+    ]);
 
-        $this->bootstrapper = new SessionUserBootstrapper;
-    }
+    $oidcUser = makeOidcUser(name: 'Jane Doe');
+    $request = makeRequest($this->app);
 
-    public function test_stores_method_based_claims_in_session(): void
-    {
-        config()->set('okta-oidc.session_claims', [
-            'okta.name' => 'getName',
-        ]);
+    $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
 
-        $oidcUser = $this->makeOidcUser(name: 'Jane Doe');
-        $request = $this->makeRequest();
+    expect($request->session()->get('okta.name'))->toBe('Jane Doe');
+});
 
-        $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
+it('stores raw claims in session', function () {
+    config()->set('okta-oidc.session_claims', [
+        'okta.raw_claims' => '@raw',
+    ]);
 
-        $this->assertSame('Jane Doe', $request->session()->get('okta.name'));
-    }
+    $raw = ['sub' => '123', 'preferred_username' => 'jdoe'];
+    $oidcUser = makeOidcUser(raw: $raw);
+    $request = makeRequest($this->app);
 
-    public function test_stores_raw_claims_in_session(): void
-    {
-        config()->set('okta-oidc.session_claims', [
-            'okta.raw_claims' => '@raw',
-        ]);
+    $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
 
-        $raw = ['sub' => '123', 'preferred_username' => 'jdoe'];
-        $oidcUser = $this->makeOidcUser(raw: $raw);
-        $request = $this->makeRequest();
+    expect($request->session()->get('okta.raw_claims'))->toBe($raw);
+});
 
-        $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
+it('stores raw claim by key', function () {
+    config()->set('okta-oidc.session_claims', [
+        'okta.preferred_username' => 'preferred_username',
+    ]);
 
-        $this->assertSame($raw, $request->session()->get('okta.raw_claims'));
-    }
+    $oidcUser = makeOidcUser(raw: ['preferred_username' => 'jdoe']);
+    $request = makeRequest($this->app);
 
-    public function test_stores_raw_claim_by_key(): void
-    {
-        config()->set('okta-oidc.session_claims', [
-            'okta.preferred_username' => 'preferred_username',
-        ]);
+    $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
 
-        $oidcUser = $this->makeOidcUser(raw: ['preferred_username' => 'jdoe']);
-        $request = $this->makeRequest();
+    expect($request->session()->get('okta.preferred_username'))->toBe('jdoe');
+});
 
-        $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
+it('supports dot notation for nested raw claims', function () {
+    config()->set('okta-oidc.session_claims', [
+        'okta.city' => 'address.city',
+    ]);
 
-        $this->assertSame('jdoe', $request->session()->get('okta.preferred_username'));
-    }
+    $oidcUser = makeOidcUser(raw: [
+        'address' => ['city' => 'Tuscaloosa'],
+    ]);
+    $request = makeRequest($this->app);
 
-    public function test_supports_dot_notation_for_nested_raw_claims(): void
-    {
-        config()->set('okta-oidc.session_claims', [
-            'okta.city' => 'address.city',
-        ]);
+    $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
 
-        $oidcUser = $this->makeOidcUser(raw: [
-            'address' => ['city' => 'Tuscaloosa'],
-        ]);
-        $request = $this->makeRequest();
+    expect($request->session()->get('okta.city'))->toBe('Tuscaloosa');
+});
 
-        $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
+it('skips null values', function () {
+    config()->set('okta-oidc.session_claims', [
+        'okta.name' => 'getName',
+    ]);
 
-        $this->assertSame('Tuscaloosa', $request->session()->get('okta.city'));
-    }
+    $oidcUser = makeOidcUser(name: null);
+    $request = makeRequest($this->app);
 
-    public function test_skips_null_values(): void
-    {
-        config()->set('okta-oidc.session_claims', [
-            'okta.name' => 'getName',
-        ]);
+    $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
 
-        $oidcUser = $this->makeOidcUser(name: null);
-        $request = $this->makeRequest();
+    expect($request->session()->has('okta.name'))->toBeFalse();
+});
 
-        $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
+it('skips empty string values', function () {
+    config()->set('okta-oidc.session_claims', [
+        'okta.name' => 'getName',
+    ]);
 
-        $this->assertFalse($request->session()->has('okta.name'));
-    }
+    $oidcUser = makeOidcUser(name: '');
+    $request = makeRequest($this->app);
 
-    public function test_skips_empty_string_values(): void
-    {
-        config()->set('okta-oidc.session_claims', [
-            'okta.name' => 'getName',
-        ]);
+    $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
 
-        $oidcUser = $this->makeOidcUser(name: '');
-        $request = $this->makeRequest();
+    expect($request->session()->has('okta.name'))->toBeFalse();
+});
 
-        $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
+it('handles empty claims config', function () {
+    config()->set('okta-oidc.session_claims', []);
 
-        $this->assertFalse($request->session()->has('okta.name'));
-    }
+    $oidcUser = makeOidcUser(name: 'Jane Doe', email: 'jdoe@example.com');
+    $request = makeRequest($this->app);
 
-    public function test_handles_empty_claims_config(): void
-    {
-        config()->set('okta-oidc.session_claims', []);
+    $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
 
-        $oidcUser = $this->makeOidcUser(name: 'Jane Doe', email: 'jdoe@example.com');
-        $request = $this->makeRequest();
+    expect($request->session()->has('okta.name'))->toBeFalse();
+    expect($request->session()->has('okta.email'))->toBeFalse();
+});
 
-        $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
+it('stores multiple claims', function () {
+    config()->set('okta-oidc.session_claims', [
+        'okta.name' => 'getName',
+        'okta.email' => 'getEmail',
+        'okta.raw_claims' => '@raw',
+    ]);
 
-        $this->assertFalse($request->session()->has('okta.name'));
-        $this->assertFalse($request->session()->has('okta.email'));
-    }
+    $raw = ['sub' => '123'];
+    $oidcUser = makeOidcUser(name: 'Jane Doe', email: 'jdoe@example.com', raw: $raw);
+    $request = makeRequest($this->app);
 
-    public function test_stores_multiple_claims(): void
-    {
-        config()->set('okta-oidc.session_claims', [
-            'okta.name' => 'getName',
-            'okta.email' => 'getEmail',
-            'okta.raw_claims' => '@raw',
-        ]);
+    $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
 
-        $raw = ['sub' => '123'];
-        $oidcUser = $this->makeOidcUser(name: 'Jane Doe', email: 'jdoe@example.com', raw: $raw);
-        $request = $this->makeRequest();
-
-        $this->bootstrapper->bootstrap($request, 'jdoe', $oidcUser);
-
-        $this->assertSame('Jane Doe', $request->session()->get('okta.name'));
-        $this->assertSame('jdoe@example.com', $request->session()->get('okta.email'));
-        $this->assertSame($raw, $request->session()->get('okta.raw_claims'));
-    }
-
-    private function makeRequest(): Request
-    {
-        $request = Request::create('/callback');
-        $request->setLaravelSession($this->app['session.store']);
-
-        return $request;
-    }
-
-    private function makeOidcUser(
-        ?string $name = null,
-        ?string $email = null,
-        array $raw = [],
-    ): object {
-        return new class ($name, $email, $raw) {
-            public function __construct(
-                private readonly ?string $name,
-                private readonly ?string $email,
-                private readonly array $raw,
-            ) {}
-
-            public function getName(): ?string
-            {
-                return $this->name;
-            }
-
-            public function getEmail(): ?string
-            {
-                return $this->email;
-            }
-
-            public function getRaw(): array
-            {
-                return $this->raw;
-            }
-        };
-    }
-}
+    expect($request->session()->get('okta.name'))->toBe('Jane Doe');
+    expect($request->session()->get('okta.email'))->toBe('jdoe@example.com');
+    expect($request->session()->get('okta.raw_claims'))->toBe($raw);
+});
