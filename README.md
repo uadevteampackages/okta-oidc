@@ -12,7 +12,7 @@ A reusable Okta OIDC authentication package for Laravel applications. Provides l
 ### 1. Install the package
 
 ```bash
-composer require ua/laravel-okta-oidc
+composer require ua/okta-oidc
 ```
 
 ### 2. Publish the config
