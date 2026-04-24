@@ -11,20 +11,20 @@ class UsernamePrincipalResolver implements PrincipalResolver
 {
     public function resolve(object $oidcUser, Request $request): string
     {
-        if (! method_exists($oidcUser, 'getEmail')) {
-            throw new OidcAuthenticationException('OIDC user object does not expose getEmail().');
+        if (! method_exists($oidcUser, 'getRaw')) {
+            throw new OidcAuthenticationException('OIDC user object does not expose getRaw().');
         }
 
-        $email = $oidcUser->getEmail();
+        $preferredUsername = data_get($oidcUser->getRaw(), 'preferred_username');
 
-        if (! filled($email)) {
-            throw new OidcAuthenticationException('OIDC user email claim is empty.');
+        if (! filled($preferredUsername)) {
+            throw new OidcAuthenticationException('OIDC user preferred_username claim is empty.');
         }
 
-        $principal = Str::of($email)->before('@')->lower()->toString();
+        $principal = Str::of($preferredUsername)->before('@')->lower()->toString();
 
         if (! filled($principal)) {
-            throw new OidcAuthenticationException('Unable to derive a principal from the OIDC email claim.');
+            throw new OidcAuthenticationException('Unable to derive a principal from the OIDC preferred_username claim.');
         }
 
         return $principal;

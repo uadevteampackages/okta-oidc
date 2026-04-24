@@ -10,39 +10,48 @@ beforeEach(function () {
 });
 
 it('extracts the username from an email address', function () {
-    $oidcUser = makeOidcUser(email: 'jdoe@ua.edu');
+    $oidcUser = makeOidcUser(raw: ['preferred_username' => 'jdoe@ua.edu']);
 
     expect($this->resolver->resolve($oidcUser, $this->request))->toBe('jdoe');
 });
 
 it('lowercases the username', function () {
-    $oidcUser = makeOidcUser(email: 'JDoe@UA.edu');
+    $oidcUser = makeOidcUser(raw: ['preferred_username' => 'JDoe@UA.edu']);
 
     expect($this->resolver->resolve($oidcUser, $this->request))->toBe('jdoe');
 });
 
 it('handles emails with dots and special characters', function () {
-    $oidcUser = makeOidcUser(email: 'jane.b.doe@ua.edu');
+    $oidcUser = makeOidcUser(raw: ['preferred_username' => 'jane.b.doe@ua.edu']);
 
     expect($this->resolver->resolve($oidcUser, $this->request))->toBe('jane.b.doe');
 });
 
-it('throws when the oidc user object has no getEmail method', function () {
+it('uses preferred_username instead of the email alias', function () {
+    $oidcUser = makeOidcUser(
+        email: 'joey.stowe@ua.edu',
+        raw: ['preferred_username' => 'jbstowe@ua.edu'],
+    );
+
+    expect($this->resolver->resolve($oidcUser, $this->request))->toBe('jbstowe');
+});
+
+it('throws when the oidc user object has no getRaw method', function () {
     $oidcUser = new class {
-        // no getEmail method
+        // no getRaw method
     };
 
     $this->resolver->resolve($oidcUser, $this->request);
-})->throws(OidcAuthenticationException::class, 'OIDC user object does not expose getEmail().');
+})->throws(OidcAuthenticationException::class, 'OIDC user object does not expose getRaw().');
 
-it('throws when the email claim is empty', function () {
-    $oidcUser = makeOidcUser(email: '');
-
-    $this->resolver->resolve($oidcUser, $this->request);
-})->throws(OidcAuthenticationException::class, 'OIDC user email claim is empty.');
-
-it('throws when the email claim is null', function () {
-    $oidcUser = makeOidcUser(email: null);
+it('throws when the preferred_username claim is empty', function () {
+    $oidcUser = makeOidcUser(raw: ['preferred_username' => '']);
 
     $this->resolver->resolve($oidcUser, $this->request);
-})->throws(OidcAuthenticationException::class, 'OIDC user email claim is empty.');
+})->throws(OidcAuthenticationException::class, 'OIDC user preferred_username claim is empty.');
+
+it('throws when the preferred_username claim is null', function () {
+    $oidcUser = makeOidcUser(raw: ['preferred_username' => null]);
+
+    $this->resolver->resolve($oidcUser, $this->request);
+})->throws(OidcAuthenticationException::class, 'OIDC user preferred_username claim is empty.');
