@@ -293,13 +293,20 @@ Session keys are configurable:
 
 The `okta-oidc.auth` middleware protects routes by checking for a valid OIDC session. It handles expired sessions differently based on the request type:
 
+Branches are evaluated in this order; the first match wins:
+
 | Request Type | Behavior |
 |---|---|
-| **Safe method** (GET, HEAD, OPTIONS) | Stores current URL as intended, redirects to login |
-| **Unsafe method** (POST, PUT, DELETE) | Redirects to the expired page — does **not** replay the request |
-| **JSON/AJAX request** | Returns `419` status with `{ "message": "...", "reauth_url": "..." }` |
+| **Inertia request** (`X-Inertia: true`) | Returns `409` with `X-Inertia-Location` header so the Inertia client triggers a full-page navigation. Safe methods point at login (and store the intended URL); unsafe methods point at the expired page. |
+| **JSON/AJAX request** | Returns `419` status with `{ "message": "...", "reauth_url": "..." }` (any HTTP verb) |
+| **Safe HTML method** (GET, HEAD, OPTIONS) | Stores current URL as intended, redirects to login |
+| **Unsafe HTML method** (POST, PUT, DELETE) | Redirects to the expired page — does **not** replay the request |
 
 This prevents accidental form resubmission after session expiry.
+
+### Inertia.js Support
+
+If you're using Inertia.js, the middleware automatically detects Inertia requests via the `X-Inertia` header and responds with HTTP `409` plus an `X-Inertia-Location` header. The Inertia client treats this as an external redirect and performs a full-page browser navigation — which is required to handle the redirect chain to Okta correctly. Detection is header-based, so the package does not depend on `inertiajs/inertia-laravel`.
 
 ## Federated Logout
 

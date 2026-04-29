@@ -68,3 +68,79 @@ it('returns json for expired ajax requests', function () {
         ->assertStatus(419)
         ->assertJsonStructure(['message', 'reauth_url']);
 });
+
+it('returns json for expired ajax GET requests', function () {
+    $this->withSession([
+        OidcConfig::principalSessionKey() => 'jdoe',
+        OidcConfig::expiresAtSessionKey() => now()->subMinute()->toIso8601String(),
+    ])->getJson('/protected')
+        ->assertStatus(419)
+        ->assertJsonStructure(['message', 'reauth_url']);
+});
+
+it('returns 409 with X-Inertia-Location to login for safe Inertia requests when session is missing', function () {
+    $response = $this->withHeaders(['X-Inertia' => 'true'])->get('/protected');
+
+    $response->assertStatus(409);
+    expect($response->headers->get('X-Inertia-Location'))
+        ->toBe(route(OidcConfig::routeName('login')));
+});
+
+it('returns 409 with X-Inertia-Location to login for safe Inertia requests when session is expired', function () {
+    $response = $this->withSession([
+        OidcConfig::principalSessionKey() => 'jdoe',
+        OidcConfig::expiresAtSessionKey() => now()->subMinute()->toIso8601String(),
+    ])->withHeaders(['X-Inertia' => 'true'])->get('/protected');
+
+    $response->assertStatus(409);
+    expect($response->headers->get('X-Inertia-Location'))
+        ->toBe(route(OidcConfig::routeName('login')));
+});
+
+it('stores the intended url for safe Inertia requests', function () {
+    $this->withHeaders(['X-Inertia' => 'true'])->get('/protected');
+
+    expect(session('url.intended'))->toBe('http://localhost/protected');
+});
+
+it('returns 409 with X-Inertia-Location to expired page for unsafe Inertia requests', function () {
+    $response = $this->withSession([
+        OidcConfig::principalSessionKey() => 'jdoe',
+        OidcConfig::expiresAtSessionKey() => now()->subMinute()->toIso8601String(),
+    ])->withHeaders(['X-Inertia' => 'true'])->post('/protected');
+
+    $response->assertStatus(409);
+    expect($response->headers->get('X-Inertia-Location'))
+        ->toBe(route(OidcConfig::routeName('expired')));
+});
+
+it('does not store intended url for unsafe Inertia requests', function () {
+    $this->withSession([
+        OidcConfig::principalSessionKey() => 'jdoe',
+        OidcConfig::expiresAtSessionKey() => now()->subMinute()->toIso8601String(),
+    ])->withHeaders(['X-Inertia' => 'true'])->post('/protected');
+
+    expect(session('url.intended'))->toBeNull();
+});
+
+it('allows valid sessions for Inertia requests', function () {
+    $this->withSession([
+        OidcConfig::principalSessionKey() => 'jdoe',
+        OidcConfig::expiresAtSessionKey() => now()->addHour()->toIso8601String(),
+    ])->withHeaders(['X-Inertia' => 'true'])->get('/protected')
+        ->assertOk()
+        ->assertSee('ok');
+});
+
+it('prefers Inertia branch over JSON branch when both headers are present', function () {
+    $response = $this->withSession([
+        OidcConfig::principalSessionKey() => 'jdoe',
+        OidcConfig::expiresAtSessionKey() => now()->subMinute()->toIso8601String(),
+    ])->withHeaders([
+        'X-Inertia' => 'true',
+        'Accept' => 'application/json',
+    ])->post('/protected');
+
+    $response->assertStatus(409);
+    expect($response->headers->get('X-Inertia-Location'))->not->toBeNull();
+});

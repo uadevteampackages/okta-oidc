@@ -17,10 +17,16 @@ class EnsureOidcSession
             return $next($request);
         }
 
-        if ($request->isMethodSafe()) {
-            $request->session()->put('url.intended', $request->fullUrl());
+        if ($this->isInertiaRequest($request)) {
+            if ($request->isMethodSafe()) {
+                $request->session()->put('url.intended', $request->fullUrl());
 
-            return redirect()->route(OidcConfig::routeName('login'));
+                return $this->inertiaLocation(route(OidcConfig::routeName('login')));
+            }
+
+            $request->session()->flash('okta_oidc_expired', true);
+
+            return $this->inertiaLocation(route(OidcConfig::routeName('expired')));
         }
 
         if ($request->expectsJson()) {
@@ -28,6 +34,12 @@ class EnsureOidcSession
                 'message' => config('okta-oidc.messages.expired'),
                 'reauth_url' => route(OidcConfig::routeName('login')),
             ], (int) config('okta-oidc.expired_request_status', 419));
+        }
+
+        if ($request->isMethodSafe()) {
+            $request->session()->put('url.intended', $request->fullUrl());
+
+            return redirect()->route(OidcConfig::routeName('login'));
         }
 
         return redirect()
@@ -48,5 +60,17 @@ class EnsureOidcSession
         }
 
         return now()->lt($expiresAt);
+    }
+
+    protected function isInertiaRequest(Request $request): bool
+    {
+        return $request->headers->has('X-Inertia');
+    }
+
+    protected function inertiaLocation(string $url): Response
+    {
+        return new Response('', Response::HTTP_CONFLICT, [
+            'X-Inertia-Location' => $url,
+        ]);
     }
 }
