@@ -76,7 +76,7 @@ A **PrincipalResolver** extracts a user identifier from the OIDC user object ret
 |----------|-------------|----------|----------------|
 | `UsernamePrincipalResolver` | Default | `preferred_username` local part, lowercased | `jdoe` |
 | `UserPrincipalNamePrincipalResolver` | Opt-in | Full `preferred_username`, lowercased | `jdoe@ua.edu` |
-| `EmailPrincipalResolver` | Opt-in | Full email, lowercased | `jdoe@ua.edu` |
+| `EmailPrincipalResolver` | Opt-in | Full email, lowercased | `john.doe@ua.edu` |
 | `OktaIdPrincipalResolver` | Opt-in | Okta user ID | `00u21yawsni0DL5V51d8` |
 
 To switch resolvers, update `config/okta-oidc.php`:
