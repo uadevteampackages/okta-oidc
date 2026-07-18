@@ -52,6 +52,11 @@ class OidcConfig
         return (bool) config('okta-oidc.federated_logout', true);
     }
 
+    public static function hydrateGuard(): bool
+    {
+        return (bool) config('okta-oidc.hydrate_guard', false);
+    }
+
     public static function userModel(): string
     {
         return config('okta-oidc.user_model', 'App\\Models\\User');

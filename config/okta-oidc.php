@@ -27,6 +27,8 @@ return [
     'principal_resolver' => UsernamePrincipalResolver::class,
     'user_bootstrapper' => SessionUserBootstrapper::class,
 
+    'hydrate_guard' => false,
+
     'user_model' => env('OKTA_OIDC_USER_MODEL', 'App\\Models\\User'),
 
     'session_keys' => [

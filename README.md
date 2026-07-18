@@ -204,6 +204,26 @@ Or via environment variable:
 OKTA_OIDC_USER_MODEL=App\Models\User
 ```
 
+### Guard Hydration (`hydrate_guard`)
+
+By default, the session-only bootstrappers never touch Laravel's auth guard, so `Auth::user()` returns `null` even though the OIDC session is valid. That means guard-based tooling — monitoring like Laravel Nightwatch, `Auth::id()` in logs, etc. — sees every request as a guest.
+
+If your app has no local users table (or you just don't want database-backed users), enable guard hydration:
+
+```php
+'hydrate_guard' => true,
+```
+
+When enabled, the `okta-oidc.auth` middleware populates the default guard on every request with a valid OIDC session, using a `GenericUser` built from the session:
+
+- `id` — the principal (e.g. the username)
+- `name` — from the `getName` session claim, when stored
+- `email` — from the `getEmail` session claim, when stored
+
+This is **request-scoped only**: `Auth::setUser()` never writes to the session and no user provider or database lookup is involved. If a real user is already authenticated (e.g. via `EloquentUserBootstrapper`), hydration is skipped and the real user wins.
+
+> **Note:** With hydration enabled, anything guard-based — the `auth` middleware, policies, `Auth::check()` — will see the generic user on routes behind `okta-oidc.auth`. If parts of your app rely on `Auth::check()` being `false` for OIDC-only sessions, leave this off.
+
 ### Creating Your Own
 
 Implement `Ua\LaravelOktaOidc\Contracts\UserBootstrapper`:
@@ -338,6 +358,7 @@ Publish with `php artisan vendor:publish --tag=okta-oidc-config`.
 | `scopes` | `['openid', 'profile', 'email']` | OAuth scopes |
 | `principal_resolver` | `UsernamePrincipalResolver::class` | Principal resolver class |
 | `user_bootstrapper` | `SessionUserBootstrapper::class` | User bootstrapper class |
+| `hydrate_guard` | `false` | Populate the auth guard with a request-scoped `GenericUser` from session claims |
 | `user_model` | `env('OKTA_OIDC_USER_MODEL', 'App\\Models\\User')` | Eloquent user model |
 | `session_keys.principal` | `'username'` | Session key for principal |
 | `session_keys.id_token` | `'okta.id_token'` | Session key for ID token |
