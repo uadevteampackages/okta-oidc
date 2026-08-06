@@ -54,6 +54,18 @@ When a user hits a protected route:
    - Runs a **UserBootstrapper** to perform any additional setup (session claims, database user, etc.)
    - Redirects back to the originally requested page
 
+If the `state` parameter Okta returns does not match the one stored in the session, the
+callback cannot be trusted and the user is redirected to the **expired page** with the
+`okta_oidc_expired` flash flag — the same state the `okta-oidc.auth` middleware uses for a
+dead session. This usually means a stale login tab, a back-button revisit, or a session
+that did not survive the round trip.
+
+The expired page is deliberately a terminal destination with a sign-in link, rather than an
+automatic bounce back to `okta-oidc.login`. If the underlying cause is that sessions are not
+persisting at all, an automatic retry would loop between the callback and Okta indefinitely,
+since Okta still holds an authenticated session and redirects back without any user
+interaction.
+
 ## Routes
 
 The package registers these routes under the `auth/oidc` prefix (configurable):
@@ -374,6 +386,7 @@ Publish with `php artisan vendor:publish --tag=okta-oidc-config`.
 ## Security Notes
 
 - The callback **regenerates the session** after successful OIDC authentication, preventing session fixation.
+- The callback **verifies the OAuth `state` parameter**; a mismatch is rejected rather than exchanged, and the user is sent to the expired page instead of receiving a 500.
 - The `return_to` parameter is validated to be a **same-host URL** before being stored as the intended redirect.
 - **Unsafe methods** (POST, PUT, DELETE) are never automatically replayed after session expiry.
 - Federated logout clears both the local session and the Okta session.
