@@ -3,12 +3,12 @@
 namespace Ua\LaravelOktaOidc\Http\Middleware;
 
 use Closure;
-use Illuminate\Auth\GenericUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
+use Ua\LaravelOktaOidc\Auth\OidcGuardUser;
 use Ua\LaravelOktaOidc\Support\OidcConfig;
 
 class EnsureOidcSession
@@ -57,9 +57,11 @@ class EnsureOidcSession
             return;
         }
 
-        // Request-scoped only: setUser() never writes to the session, so
-        // nothing is persisted and no user provider lookup is involved.
-        Auth::setUser(new GenericUser([
+        // setUser() does not log in or store anything in the session and no
+        // user provider lookup is involved. The database session driver would
+        // still copy Auth::id() into sessions.user_id; OidcDatabaseSessionHandler
+        // skips OidcGuardUser so a username never lands in that numeric column.
+        Auth::setUser(new OidcGuardUser([
             'id' => $request->session()->get(OidcConfig::principalSessionKey()),
             'name' => $this->claimValue($request, 'getName'),
             'email' => $this->claimValue($request, 'getEmail'),

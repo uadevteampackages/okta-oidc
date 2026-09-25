@@ -9,6 +9,7 @@ use SocialiteProviders\Okta\Provider as OktaProvider;
 use Ua\LaravelOktaOidc\Contracts\PrincipalResolver;
 use Ua\LaravelOktaOidc\Contracts\UserBootstrapper;
 use Ua\LaravelOktaOidc\Http\Middleware\EnsureOidcSession;
+use Ua\LaravelOktaOidc\Session\OidcDatabaseSessionHandler;
 
 class OktaOidcServiceProvider extends ServiceProvider
 {
@@ -44,6 +45,26 @@ class OktaOidcServiceProvider extends ServiceProvider
             config('okta-oidc.middleware_alias', 'okta-oidc.auth'),
             EnsureOidcSession::class
         );
+
+        $this->registerDatabaseSessionHandler();
+    }
+
+    /**
+     * Keep a hydrated OIDC principal out of sessions.user_id. Only
+     * OidcGuardUser is affected; real users are stored as before.
+     */
+    protected function registerDatabaseSessionHandler(): void
+    {
+        $this->callAfterResolving('session', function ($manager) {
+            $manager->extend('database', function ($app) {
+                return new OidcDatabaseSessionHandler(
+                    $app['db']->connection($app['config']->get('session.connection')),
+                    $app['config']->get('session.table'),
+                    $app['config']->get('session.lifetime'),
+                    $app,
+                );
+            });
+        });
     }
 
     protected function registerOktaServiceConfig(): void
