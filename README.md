@@ -232,7 +232,9 @@ When enabled, the `okta-oidc.auth` middleware populates the default guard on eve
 - `name` — from the `getName` session claim, when stored
 - `email` — from the `getEmail` session claim, when stored
 
-This is **request-scoped only**: `Auth::setUser()` never writes to the session and no user provider or database lookup is involved. If a real user is already authenticated (e.g. via `EloquentUserBootstrapper`), hydration is skipped and the real user wins.
+This is **request-scoped only**: `Auth::setUser()` does not log the user in or store anything in the session, and no user provider or database lookup is involved. If a real user is already authenticated (e.g. via `EloquentUserBootstrapper`), hydration is skipped and the real user wins.
+
+With `SESSION_DRIVER=database`, Laravel copies `Auth::id()` into `sessions.user_id` on every session write. That column is a numeric `foreignId` in Laravel's default migration, so the package registers its own `database` session handler that stores `null` there for the hydrated user. The principal still reaches `Auth::id()`, logs, and Nightwatch; real authenticated users are stored exactly as before. No migration change is needed.
 
 > **Note:** With hydration enabled, anything guard-based — the `auth` middleware, policies, `Auth::check()` — will see the generic user on routes behind `okta-oidc.auth`. If parts of your app rely on `Auth::check()` being `false` for OIDC-only sessions, leave this off.
 
