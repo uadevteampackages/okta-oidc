@@ -50,6 +50,10 @@ When a user hits a protected route:
 2. If missing/expired, the user is redirected to Okta to sign in
 3. After Okta authentication, the callback route:
    - Resolves a **principal** (username, email, etc.) via a `PrincipalResolver`
+   - If the session already belongs to that principal (re-authentication after expiry), keeps
+     the session data and rotates the session ID. Otherwise (a different person, or no
+     principal yet) the whole session is **invalidated**, so nothing an app cached for the
+     previous user survives
    - Stores the principal, ID token, and expiration in the session
    - Runs a **UserBootstrapper** to perform any additional setup (session claims, database user, etc.)
    - Redirects back to the originally requested page
