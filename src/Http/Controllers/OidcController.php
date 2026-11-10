@@ -58,7 +58,22 @@ class OidcController extends Controller
         $principal = $principalResolver->resolve($oidcUser, $request);
         $intendedUrl = $request->session()->pull('url.intended', OidcConfig::afterLoginRedirect());
 
-        $request->session()->regenerate();
+        $previousPrincipal = $request->session()->get(OidcConfig::principalSessionKey());
+
+        if ($previousPrincipal === $principal) {
+            // The same person re-authenticating, typically after the token expired.
+            // Keep their app state (forms, filters, cached lookups) and only rotate
+            // the session ID.
+            $request->session()->regenerate();
+        } else {
+            // A different person, or a session with no principal at all. Nothing in
+            // it may carry over: apps cache user-keyed data in the session, and
+            // SessionUserBootstrapper only overwrites claims that are filled. Flush
+            // it, rotate the ID and the CSRF token. State was already validated by
+            // ->user() and url.intended was pulled above, so nothing needed is lost.
+            $request->session()->invalidate();
+        }
+
         $request->session()->put(OidcConfig::principalSessionKey(), $principal);
 
         if (filled($oidcUser->id_token ?? null)) {
