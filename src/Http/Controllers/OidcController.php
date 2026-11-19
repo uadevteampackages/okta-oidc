@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\AbstractProvider;
@@ -35,17 +36,8 @@ class OidcController extends Controller
 
     public function callback(Request $request, PrincipalResolver $principalResolver, UserBootstrapper $userBootstrapper): RedirectResponse
     {
-        if ($request->filled('error')) {
-            // Okta declined the sign-in and sent an error instead of a code, for
-            // example access_denied when the user is not assigned to the app. There is
-            // no code to exchange, and signing in again will give the same answer, so
-            // this goes to the failed page rather than the expired one.
-            Log::warning('Okta returned an error to the OIDC callback.', [
-                'error' => $request->string('error')->toString(),
-                'error_description' => $request->string('error_description')->toString(),
-            ]);
-
-            return $this->redirectToFailed();
+        if ($request->has('error')) {
+            return $this->handleErrorCallback($request);
         }
 
         /** @var AbstractProvider $driver */
@@ -70,19 +62,31 @@ class OidcController extends Controller
             // front of the user instead, which costs one click and cannot loop.
             return $this->redirectToExpired();
         } catch (ClientException $e) {
+            $status = $e->getResponse()->getStatusCode();
+
+            // 429 (Okta's rate limit) and 408 are temporary, so they are handled like
+            // an outage: reported, and the user gets a page to try again from.
+            if ($status === 429 || $status === 408) {
+                report($e);
+
+                return $this->redirectToFailed();
+            }
+
+            $body = $this->oauthErrorBody($e);
+
             // invalid_grant means Okta no longer accepts this authorization code: it
-            // expired while the user was at Okta, or it was already exchanged. Signing
-            // in again issues a fresh code, so treat it like a lost callback.
+            // expired before the app exchanged it, or it was already used. Signing in
+            // again issues a fresh code, so treat it like a lost callback.
             //
             // Any other 4xx (invalid_client after a secret rotation, a rejected token on
-            // the userinfo call) is a configuration problem that retrying cannot fix,
-            // so it is left to surface as an error.
-            if ($this->oauthError($e) !== 'invalid_grant') {
+            // the userinfo call) points at configuration, which retrying cannot fix, so
+            // it is left to surface as an error.
+            if (($body['error'] ?? null) !== 'invalid_grant') {
                 throw $e;
             }
 
             Log::notice('Okta rejected the authorization code on the OIDC callback.', [
-                'error_description' => $this->oauthErrorDescription($e),
+                'error_description' => $this->limitedString($body['error_description'] ?? null),
             ]);
 
             return $this->redirectToExpired();
@@ -205,30 +209,61 @@ class OidcController extends Controller
     }
 
     /**
-     * The OAuth error code from a token endpoint response, e.g. invalid_grant.
+     * Handle a callback where Okta sent ?error=... instead of a code.
+     *
+     * Okta does this when it declines the sign-in, for example access_denied when
+     * the user is not assigned to the app. There is no code to exchange, and letting
+     * Socialite continue would post code=null to Okta and turn the 400 into a 500.
+     *
+     * The state is checked first, as it is for a normal callback, so only a callback
+     * from a login this session started is logged as an Okta error.
      */
-    protected function oauthError(ClientException $e): ?string
+    protected function handleErrorCallback(Request $request): RedirectResponse
     {
-        $error = $this->oauthErrorBody($e)['error'] ?? null;
+        $expected = $request->session()->pull('state');
+        $actual = $request->input('state');
 
-        return is_string($error) ? $error : null;
-    }
+        if (! is_string($expected) || $expected === '' || ! is_string($actual) || ! hash_equals($expected, $actual)) {
+            return $this->redirectToExpired();
+        }
 
-    protected function oauthErrorDescription(ClientException $e): ?string
-    {
-        $description = $this->oauthErrorBody($e)['error_description'] ?? null;
+        // Signing in again will most likely give the same answer, so this goes to the
+        // failed page rather than the expired one.
+        Log::warning('Okta returned an error to the OIDC callback.', [
+            'error' => $this->limitedString($request->input('error')),
+            'error_description' => $this->limitedString($request->input('error_description')),
+        ]);
 
-        return is_string($description) ? $description : null;
+        return $this->redirectToFailed();
     }
 
     /**
+     * The decoded OAuth error body from a failed token or userinfo call.
+     *
+     * The stream is rewound afterwards so the exception still carries a readable
+     * body if it is rethrown and reported.
+     *
      * @return array<string, mixed>
      */
     protected function oauthErrorBody(ClientException $e): array
     {
-        $body = json_decode((string) $e->getResponse()->getBody(), true);
+        $stream = $e->getResponse()->getBody();
+        $body = json_decode((string) $stream, true);
+
+        if ($stream->isSeekable()) {
+            $stream->rewind();
+        }
 
         return is_array($body) ? $body : [];
+    }
+
+    /**
+     * A log-safe copy of a value that came from a URL or a remote response: strings
+     * only, and capped so a crafted request cannot write arbitrarily long entries.
+     */
+    protected function limitedString(mixed $value): ?string
+    {
+        return is_string($value) ? Str::limit($value, 500) : null;
     }
 
     protected function isSameHostUrl(string $url, Request $request): bool

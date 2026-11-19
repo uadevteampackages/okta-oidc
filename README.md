@@ -68,13 +68,26 @@ The callback also handles failures from Okta itself instead of returning a 500:
 
 | What happened | Where the user goes | Logged |
 |---|---|---|
-| Okta sent `?error=...` instead of a code (e.g. `access_denied` when the user is not assigned to the app) | Failed page (`okta_oidc_failed` flash flag) | `warning` with `error` and `error_description` |
-| Okta rejected the code as `invalid_grant` (it expired while the user was at Okta, or was already used) | Expired page | `notice` |
+| Okta sent `?error=...` instead of a code (e.g. `access_denied` when the user is not assigned to the app) and the `state` matches | Failed page (`okta_oidc_failed` flash flag) | `warning` with `error` and `error_description` |
+| Same, but the `state` is missing or does not match | Expired page | Nothing; the request did not come from a login this session started |
+| Okta rejected the code as `invalid_grant` (it expired before the app exchanged it, or was already used) | Expired page | `notice` with `error_description` |
+| Okta rate-limited the request (429) or returned 408 | Failed page | Reported through the exception handler |
 | Okta was unreachable, timed out, or returned a 5xx | Failed page | Reported through the exception handler |
 | Any other 4xx, such as `invalid_client` after a client secret rotation | Not handled: surfaces as an error | Reported through the exception handler |
 
-The last row is left as an error on purpose: it is a configuration problem that signing in
+The last row is left as an error on purpose: it points at configuration, which signing in
 again cannot fix, so it should stay loud.
+
+The package does not set HTTP timeouts on the calls to Okta, and Guzzle's defaults allow a
+hung request to run until the web server or gateway gives up. For a slow Okta to reach the
+failed page instead, set timeouts in `config/services.php`:
+
+```php
+'okta' => [
+    // ...
+    'guzzle' => ['connect_timeout' => 5, 'timeout' => 10],
+],
+```
 
 The expired page is deliberately a terminal destination with a sign-in link, rather than an
 automatic bounce back to `okta-oidc.login`. If the underlying cause is that sessions are not
@@ -406,7 +419,7 @@ Publish with `php artisan vendor:publish --tag=okta-oidc-config`.
 ## Security Notes
 
 - The callback **regenerates the session** after successful OIDC authentication, preventing session fixation.
-- The callback **verifies the OAuth `state` parameter**; a mismatch is rejected rather than exchanged, and the user is sent to the expired page instead of receiving a 500. The failed and expired pages never redirect back to Okta on their own, so a failure that repeats cannot become a redirect loop.
+- The callback **verifies the OAuth `state` parameter**; a mismatch is rejected rather than exchanged, and the user is sent to the expired page instead of receiving a 500. An `?error=` callback gets the same `state` check before anything is logged. The failed and expired pages never redirect back to Okta on their own, so a failure that repeats cannot become a redirect loop.
 - The `return_to` parameter is validated to be a **same-host URL** before being stored as the intended redirect.
 - **Unsafe methods** (POST, PUT, DELETE) are never automatically replayed after session expiry.
 - Federated logout clears both the local session and the Okta session.
