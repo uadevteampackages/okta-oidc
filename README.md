@@ -70,7 +70,7 @@ The callback also handles failures from Okta itself instead of returning a 500:
 |---|---|---|
 | Okta sent `?error=...` instead of a code (e.g. `access_denied` when the user is not assigned to the app) and the `state` matches | Failed page (`okta_oidc_failed` flash flag) | `warning` with `error` and `error_description` |
 | Same, but the `state` is missing or does not match | Expired page | Nothing; the request did not come from a login this session started |
-| Okta rejected the code as `invalid_grant` (it expired before the app exchanged it, or was already used) | Expired page | `notice` with `error_description` |
+| Okta rejected the code as `invalid_grant` (it expired before the app exchanged it, was already used, or no longer matches the request; `error_description` says which) | Expired page | `notice` with `error_description` |
 | Okta rate-limited the request (429) or returned 408 | Failed page | Reported through the exception handler |
 | Okta was unreachable, timed out, or returned a 5xx | Failed page | Reported through the exception handler |
 | Any other 4xx, such as `invalid_client` after a client secret rotation | Not handled: surfaces as an error | Reported through the exception handler |

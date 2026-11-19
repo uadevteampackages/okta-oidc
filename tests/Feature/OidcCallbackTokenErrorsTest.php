@@ -148,7 +148,7 @@ describe('a callback with an error instead of a code', function () {
         Log::spy();
         tokenErrorsOktaRespondsWith([]);
 
-        tokenErrorsCallback(['code' => null] + $query)
+        tokenErrorsCallback($query + ['code' => null])
             ->assertRedirect(route(OidcConfig::routeName('failed')));
 
         Log::shouldHaveReceived('warning')->once()->withArgs(
@@ -159,6 +159,16 @@ describe('a callback with an error instead of a code', function () {
         'error_description' => [['error' => 'access_denied', 'error_description' => ['x']]],
         'code' => [['code' => ['x'], 'error' => 'access_denied']],
     ]);
+
+    it('does not trust an error callback whose state is an array', function () {
+        Log::spy();
+        tokenErrorsOktaRespondsWith([]);
+
+        tokenErrorsCallback(['state' => ['the-state']] + tokenErrorsDeniedQuery())
+            ->assertRedirect(route(OidcConfig::routeName('expired')));
+
+        Log::shouldNotHaveReceived('warning');
+    });
 
     it('caps the length of logged values', function () {
         Log::spy();
@@ -258,6 +268,25 @@ it('handles the guzzle 8 timeout exceptions', function (string $class) {
     'GuzzleHttp\\Exception\\NetworkTimeoutException',
     'GuzzleHttp\\Exception\\ConnectTimeoutException',
 ]);
+
+it('handles a guzzle 8 response timeout, which carries a response', function () {
+    $class = 'GuzzleHttp\\Exception\\ResponseTimeoutException';
+
+    if (! class_exists($class)) {
+        $this->markTestSkipped("{$class} only exists in Guzzle 8.");
+    }
+
+    Exceptions::fake();
+    tokenErrorsOktaRespondsWith([
+        new $class('Operation timed out', new PsrRequest('POST', 'https://example.okta.com'), new PsrResponse(200)),
+    ]);
+
+    tokenErrorsCallback()
+        ->assertRedirect(route(OidcConfig::routeName('failed')))
+        ->assertSessionHas('okta_oidc_failed', true);
+
+    Exceptions::assertReported($class);
+});
 
 it('reports the error and sends the user to the failed page when okta returns a 5xx', function () {
     Exceptions::fake();

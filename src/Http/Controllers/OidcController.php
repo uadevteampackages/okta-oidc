@@ -75,8 +75,9 @@ class OidcController extends Controller
             $body = $this->oauthErrorBody($e);
 
             // invalid_grant means Okta no longer accepts this authorization code: it
-            // expired before the app exchanged it, or it was already used. Signing in
-            // again issues a fresh code, so treat it like a lost callback.
+            // expired before the app exchanged it, was already used, or no longer
+            // matches the request (the notice's error_description says which). Signing
+            // in again issues a fresh code, so treat it like a lost callback.
             //
             // Any other 4xx (invalid_client after a secret rotation, a rejected token on
             // the userinfo call) points at configuration, which retrying cannot fix, so
