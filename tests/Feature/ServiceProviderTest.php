@@ -26,6 +26,7 @@ it('registers all oidc routes', function () {
     expect($routes->has(OidcConfig::routeName('callback')))->toBeTrue();
     expect($routes->has(OidcConfig::routeName('logout')))->toBeTrue();
     expect($routes->has(OidcConfig::routeName('expired')))->toBeTrue();
+    expect($routes->has(OidcConfig::routeName('failed')))->toBeTrue();
     expect($routes->has(OidcConfig::routeName('logged-out')))->toBeTrue();
 });
 
