@@ -50,6 +50,7 @@ return [
 
     'messages' => [
         'expired' => 'Your session expired. Sign in again and retry the action.',
+        'failed' => 'We could not sign you in. Try again, and contact support if this keeps happening.',
         'logged_out' => 'You have been successfully signed out. Please use the button below to sign in again.',
     ],
 

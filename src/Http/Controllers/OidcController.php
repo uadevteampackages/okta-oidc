@@ -2,9 +2,12 @@
 
 namespace Ua\LaravelOktaOidc\Http\Controllers;
 
+use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Exception\TransferException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\AbstractProvider;
@@ -32,6 +35,19 @@ class OidcController extends Controller
 
     public function callback(Request $request, PrincipalResolver $principalResolver, UserBootstrapper $userBootstrapper): RedirectResponse
     {
+        if ($request->filled('error')) {
+            // Okta declined the sign-in and sent an error instead of a code, for
+            // example access_denied when the user is not assigned to the app. There is
+            // no code to exchange, and signing in again will give the same answer, so
+            // this goes to the failed page rather than the expired one.
+            Log::warning('Okta returned an error to the OIDC callback.', [
+                'error' => $request->string('error')->toString(),
+                'error_description' => $request->string('error_description')->toString(),
+            ]);
+
+            return $this->redirectToFailed();
+        }
+
         /** @var AbstractProvider $driver */
         $driver = Socialite::driver(OidcConfig::driver());
 
@@ -53,6 +69,30 @@ class OidcController extends Controller
             // without any user interaction. The expired view puts a sign-in link in
             // front of the user instead, which costs one click and cannot loop.
             return $this->redirectToExpired();
+        } catch (ClientException $e) {
+            // invalid_grant means Okta no longer accepts this authorization code: it
+            // expired while the user was at Okta, or it was already exchanged. Signing
+            // in again issues a fresh code, so treat it like a lost callback.
+            //
+            // Any other 4xx (invalid_client after a secret rotation, a rejected token on
+            // the userinfo call) is a configuration problem that retrying cannot fix,
+            // so it is left to surface as an error.
+            if ($this->oauthError($e) !== 'invalid_grant') {
+                throw $e;
+            }
+
+            Log::notice('Okta rejected the authorization code on the OIDC callback.', [
+                'error_description' => $this->oauthErrorDescription($e),
+            ]);
+
+            return $this->redirectToExpired();
+        } catch (TransferException $e) {
+            // Okta could not be reached, timed out, or answered with a 5xx. Report it so
+            // the outage is visible, and give the user a page with a way to try again
+            // instead of a 500.
+            report($e);
+
+            return $this->redirectToFailed();
         }
 
         $principal = $principalResolver->resolve($oidcUser, $request);
@@ -119,6 +159,17 @@ class OidcController extends Controller
         ]);
     }
 
+    public function failed(): View
+    {
+        return view('okta-oidc::failed', [ // @phpstan-ignore argument.type
+            // Apps that published the config before this message existed have a
+            // messages array without it, and mergeConfigFrom does not fill nested keys.
+            'message' => config('okta-oidc.messages.failed')
+                ?: 'We could not sign you in. Try again, and contact support if this keeps happening.',
+            'loginUrl' => route(OidcConfig::routeName('login')),
+        ]);
+    }
+
     public function loggedOut(): View
     {
         return view('okta-oidc::logged-out', [ // @phpstan-ignore argument.type
@@ -138,6 +189,46 @@ class OidcController extends Controller
         return redirect()
             ->route(OidcConfig::routeName('expired'))
             ->with('okta_oidc_expired', true);
+    }
+
+    /**
+     * Send the user to the sign-in failed page, a terminal page with a sign-in link.
+     *
+     * Like the expired page, it never redirects back to Okta on its own, so a
+     * failure that repeats cannot turn into a redirect loop.
+     */
+    protected function redirectToFailed(): RedirectResponse
+    {
+        return redirect()
+            ->route(OidcConfig::routeName('failed'))
+            ->with('okta_oidc_failed', true);
+    }
+
+    /**
+     * The OAuth error code from a token endpoint response, e.g. invalid_grant.
+     */
+    protected function oauthError(ClientException $e): ?string
+    {
+        $error = $this->oauthErrorBody($e)['error'] ?? null;
+
+        return is_string($error) ? $error : null;
+    }
+
+    protected function oauthErrorDescription(ClientException $e): ?string
+    {
+        $description = $this->oauthErrorBody($e)['error_description'] ?? null;
+
+        return is_string($description) ? $description : null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function oauthErrorBody(ClientException $e): array
+    {
+        $body = json_decode((string) $e->getResponse()->getBody(), true);
+
+        return is_array($body) ? $body : [];
     }
 
     protected function isSameHostUrl(string $url, Request $request): bool

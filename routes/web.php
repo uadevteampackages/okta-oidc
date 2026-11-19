@@ -12,5 +12,6 @@ Route::group([
     Route::get('callback', [OidcController::class, 'callback'])->name('callback');
     Route::match(['get', 'post'], 'logout', [OidcController::class, 'logout'])->name('logout');
     Route::get('expired', [OidcController::class, 'expired'])->name('expired');
+    Route::get('failed', [OidcController::class, 'failed'])->name('failed');
     Route::get('logged-out', [OidcController::class, 'loggedOut'])->name('logged-out');
 });
