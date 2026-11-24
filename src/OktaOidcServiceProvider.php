@@ -10,6 +10,7 @@ use Ua\LaravelOktaOidc\Contracts\PrincipalResolver;
 use Ua\LaravelOktaOidc\Contracts\UserBootstrapper;
 use Ua\LaravelOktaOidc\Http\Middleware\EnsureOidcSession;
 use Ua\LaravelOktaOidc\Session\OidcDatabaseSessionHandler;
+use Ua\LaravelOktaOidc\Support\OidcConfig;
 
 class OktaOidcServiceProvider extends ServiceProvider
 {
@@ -67,13 +68,32 @@ class OktaOidcServiceProvider extends ServiceProvider
         });
     }
 
+    /**
+     * Fill services.okta, which Socialite reads, from okta-oidc.okta. Keys the app
+     * already set in services.okta win.
+     *
+     * The guzzle options are merged one level deeper so the package's default
+     * timeouts survive an app that sets only some options: an app setting just
+     * ['timeout' => 30], or just a proxy or handler, keeps the default
+     * connect_timeout. Without a limit, a hung call to Okta holds the callback open
+     * until the web server or gateway gives up, and the sign-in failed page that
+     * handles a timeout is never reached.
+     */
     protected function registerOktaServiceConfig(): void
     {
         $packageConfig = config('okta-oidc.okta', []);
         $appConfig = config('services.okta', []);
 
+        $merged = array_merge($packageConfig, $appConfig);
+
+        $merged['guzzle'] = array_replace(
+            OidcConfig::httpTimeouts(),
+            is_array($packageConfig['guzzle'] ?? null) ? $packageConfig['guzzle'] : [],
+            is_array($appConfig['guzzle'] ?? null) ? $appConfig['guzzle'] : [],
+        );
+
         config([
-            'services.okta' => array_merge($packageConfig, $appConfig),
+            'services.okta' => $merged,
         ]);
     }
 }

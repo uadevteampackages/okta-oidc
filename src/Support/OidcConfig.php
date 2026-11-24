@@ -4,6 +4,16 @@ namespace Ua\LaravelOktaOidc\Support;
 
 class OidcConfig
 {
+    /**
+     * Seconds allowed to open the connection to Okta (TCP and TLS).
+     */
+    public const DEFAULT_CONNECT_TIMEOUT = 5;
+
+    /**
+     * Seconds allowed for a whole request to Okta, connection included.
+     */
+    public const DEFAULT_TIMEOUT = 10;
+
     public static function driver(): string
     {
         return config('okta-oidc.driver', 'okta');
@@ -75,5 +85,34 @@ class OidcConfig
         $key = array_search($accessor, static::sessionClaims(), true);
 
         return $key !== false ? $key : null;
+    }
+
+    /**
+     * The Guzzle timeouts for the package's calls to Okta (token exchange and
+     * userinfo), from okta-oidc.http.
+     *
+     * A missing, null, negative or non-numeric value falls back to the package
+     * default rather than to no limit, so a typo in an env var cannot quietly turn
+     * timeouts off. 0 is passed through: it is Guzzle's own "no limit".
+     *
+     * @return array{connect_timeout: int|float, timeout: int|float}
+     */
+    public static function httpTimeouts(): array
+    {
+        return [
+            'connect_timeout' => static::timeoutValue('connect_timeout', static::DEFAULT_CONNECT_TIMEOUT),
+            'timeout' => static::timeoutValue('timeout', static::DEFAULT_TIMEOUT),
+        ];
+    }
+
+    protected static function timeoutValue(string $key, int $default): int|float
+    {
+        $value = config("okta-oidc.http.{$key}");
+
+        if (! is_numeric($value) || $value < 0) {
+            return $default;
+        }
+
+        return $value + 0;
     }
 }

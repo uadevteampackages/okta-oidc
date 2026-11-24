@@ -78,22 +78,46 @@ The callback also handles failures from Okta itself instead of returning a 500:
 The last row is left as an error on purpose: it points at configuration, which signing in
 again cannot fix, so it should stay loud.
 
-The package does not set HTTP timeouts on the calls to Okta, and Guzzle's defaults allow a
-hung request to run until the web server or gateway gives up. For a slow Okta to reach the
-failed page instead, set timeouts in `config/services.php`:
-
-```php
-'okta' => [
-    // ...
-    'guzzle' => ['connect_timeout' => 5, 'timeout' => 10],
-],
-```
-
 The expired page is deliberately a terminal destination with a sign-in link, rather than an
 automatic bounce back to `okta-oidc.login`. If the underlying cause is that sessions are not
 persisting at all, an automatic retry would loop between the callback and Okta indefinitely,
 since Okta still holds an authenticated session and redirects back without any user
 interaction.
+
+### Timeouts on the calls to Okta
+
+The callback makes two calls to Okta: it exchanges the authorization code for a token, then
+fetches the user's profile. Each call gets a **5 second connect timeout** and a **10 second
+total timeout** by default, so a slow or hung Okta sends the user to the failed page instead
+of holding the request open until the web server or gateway gives up. The calls run one
+after the other, so at worst a user waits about 20 seconds before seeing the failed page. No
+configuration is needed.
+
+To change them, set these in `.env`:
+
+```env
+OKTA_OIDC_CONNECT_TIMEOUT=5
+OKTA_OIDC_TIMEOUT=10
+```
+
+`0` means no limit. A value that is empty, negative or not a number falls back to the
+default, so a typo cannot turn the timeouts off.
+
+Other Guzzle options, such as `proxy`, `verify` or a test `handler`, go in the `okta` entry
+of `config/services.php`. Options there are merged one by one over the defaults, and win
+over the `.env` values above, so setting only a proxy keeps both timeouts:
+
+```php
+'okta' => [
+    // Your app's own Okta settings (an API token, for example) can live here too.
+    'guzzle' => ['proxy' => 'http://proxy.example.edu:3128'],
+],
+```
+
+If your app already sets `guzzle` timeouts in `config/services.php`, as earlier versions of
+this README told you to, they still apply and nothing needs to change. Make sure there is
+only one `'okta'` key in that file: PHP keeps the last of two duplicate keys, so a second
+`'okta'` array silently replaces the first.
 
 ## Routes
 
@@ -395,6 +419,8 @@ Publish with `php artisan vendor:publish --tag=okta-oidc-config`.
 | `okta.client_secret` | `env('OKTA_CLIENT_SECRET')` | OAuth client secret |
 | `okta.redirect` | `env('OKTA_REDIRECT_URI')` | Callback URL |
 | `okta.auth_server_id` | `env('OKTA_AUTH_SERVER_ID')` | Auth server ID |
+| `http.connect_timeout` | `env('OKTA_OIDC_CONNECT_TIMEOUT', 5)` | Seconds to connect to Okta; `0` is no limit |
+| `http.timeout` | `env('OKTA_OIDC_TIMEOUT', 10)` | Seconds for each whole call to Okta; `0` is no limit |
 | `routes.prefix` | `'auth/oidc'` | Route prefix |
 | `routes.middleware` | `['web']` | Route middleware |
 | `routes.name_prefix` | `'okta-oidc.'` | Route name prefix |
