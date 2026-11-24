@@ -125,7 +125,9 @@ class OidcConfig
             return preg_match('/[1-9]/', (string) $value) ? $default : 0;
         }
 
-        if (! is_finite($seconds) || $seconds < 0.001 || $seconds > PHP_INT_MAX / 1000) {
+        // Guzzle multiplies by 1000 as a float and casts to int; at 2^63 or above
+        // that overflows. (float) PHP_INT_MAX is exactly 2^63.
+        if (! is_finite($seconds) || $seconds < 0.001 || (float) $seconds * 1000 >= (float) PHP_INT_MAX) {
             return $default;
         }
 

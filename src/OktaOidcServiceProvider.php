@@ -102,7 +102,8 @@ class OktaOidcServiceProvider extends ServiceProvider
      * 'timeout' => env('SOME_VAR') pattern: an unset or empty variable (null or '')
      * leaves the default in place instead of removing the limit or failing every
      * sign-in, and a numeric string becomes a number, which Guzzle 8 requires. 0 is
-     * still the way to remove a limit.
+     * still the way to remove a limit; a string such as '1e-999' that only comes out
+     * as 0 is left as it is, so Guzzle reports it instead of dropping the limit.
      *
      * @return array<array-key, mixed>
      */
@@ -120,7 +121,11 @@ class OktaOidcServiceProvider extends ServiceProvider
             if ($options[$key] === null || $options[$key] === '') {
                 unset($options[$key]);
             } elseif (is_string($options[$key]) && is_numeric($options[$key])) {
-                $options[$key] += 0;
+                $number = $options[$key] + 0;
+
+                if ($number != 0 || ! preg_match('/[1-9]/', $options[$key])) {
+                    $options[$key] = $number;
+                }
             }
         }
 
