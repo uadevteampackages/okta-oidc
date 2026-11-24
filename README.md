@@ -87,11 +87,11 @@ interaction.
 ### Timeouts on the calls to Okta
 
 The callback makes two calls to Okta: it exchanges the authorization code for a token, then
-fetches the user's profile. Each call gets a **5 second connect timeout** and a **10 second
-total timeout** by default, so a slow or hung Okta sends the user to the failed page instead
-of holding the request open until the web server or gateway gives up. The calls run one
-after the other, so with Guzzle's default cURL handler a user waits at most about 20 seconds
-before seeing the failed page. No configuration is needed.
+fetches the user's profile. With Guzzle's default cURL handler, each call gets a **5 second
+connect timeout** and a **10 second total timeout** by default, so a slow or hung Okta sends
+the user to the failed page instead of holding the request open until the web server or
+gateway gives up. The calls run one after the other, so a user waits at most about 20
+seconds before seeing the failed page. No configuration is needed.
 
 To change them, set these in `.env`:
 
@@ -102,7 +102,8 @@ OKTA_OIDC_TIMEOUT=10
 
 `0` removes the package's limit, leaving Guzzle's own behaviour (on Guzzle 7 with cURL, that
 still means curl's 300 second connect limit). A value that is empty, not a number, negative,
-or below 0.001 falls back to the default, so a typo cannot turn the timeouts off. If your app
+below 0.001 or absurdly large falls back to the default, so a typo cannot turn the timeouts
+off or break sign-in. If your app
 caches its config (`php artisan config:cache`), rebuild the cache after changing these.
 
 Other Guzzle options, such as `proxy`, `verify` or a test `handler`, go in the `okta` entry
@@ -116,8 +117,8 @@ over the `.env` values above, so setting only a proxy keeps both timeouts:
 ],
 ```
 
-A timeout set to `null` there (for example `env()` of a variable that is not set) is ignored,
-so the default applies; use `0` to remove a limit.
+A timeout set there with `env()` works: a variable that is not set or is empty leaves the
+default in place, and a number is used as given. Use `0` to remove a limit.
 
 If your app already sets `guzzle` timeouts in `config/services.php`, as earlier versions of
 this README told you to, they still apply and nothing needs to change. Make sure there is

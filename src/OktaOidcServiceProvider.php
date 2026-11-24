@@ -98,9 +98,11 @@ class OktaOidcServiceProvider extends ServiceProvider
     }
 
     /**
-     * Guzzle options an app set, minus timeouts left null. An app writing
-     * 'timeout' => env('SOME_VAR') with the variable unset gets the default
-     * instead of no limit; 0 is still the way to remove a limit.
+     * Guzzle options an app set, with the timeouts tidied for the common
+     * 'timeout' => env('SOME_VAR') pattern: an unset or empty variable (null or '')
+     * leaves the default in place instead of removing the limit or failing every
+     * sign-in, and a numeric string becomes a number, which Guzzle 8 requires. 0 is
+     * still the way to remove a limit.
      *
      * @return array<array-key, mixed>
      */
@@ -111,8 +113,14 @@ class OktaOidcServiceProvider extends ServiceProvider
         }
 
         foreach (['connect_timeout', 'timeout'] as $key) {
-            if (array_key_exists($key, $options) && $options[$key] === null) {
+            if (! array_key_exists($key, $options)) {
+                continue;
+            }
+
+            if ($options[$key] === null || $options[$key] === '') {
                 unset($options[$key]);
+            } elseif (is_string($options[$key]) && is_numeric($options[$key])) {
+                $options[$key] += 0;
             }
         }
 

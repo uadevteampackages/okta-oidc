@@ -131,11 +131,21 @@ it('ignores a non-array guzzle entry', function () {
     expect(httpTimeoutsDriverGuzzle())->toBe(['connect_timeout' => 5, 'timeout' => 10]);
 });
 
-it('keeps the default when services.okta.guzzle sets a timeout to null', function () {
-    // e.g. 'timeout' => env('OKTA_TIMEOUT') with the variable unset.
-    httpTimeoutsRegisterWith(httpTimeoutsOktaConfig(['connect_timeout' => null, 'timeout' => null]));
+it('keeps the default when services.okta.guzzle sets a timeout to null or empty', function (mixed $value) {
+    // 'timeout' => env('OKTA_TIMEOUT') with the variable unset (null) or set empty ('').
+    httpTimeoutsRegisterWith(httpTimeoutsOktaConfig(['connect_timeout' => $value, 'timeout' => $value]));
 
     expect(httpTimeoutsDriverGuzzle())->toBe(['connect_timeout' => 5, 'timeout' => 10]);
+})->with([
+    'null' => [null],
+    'empty string' => [''],
+]);
+
+it('turns numeric string timeouts in services.okta.guzzle into numbers', function () {
+    // 'timeout' => env('OKTA_TIMEOUT') with OKTA_TIMEOUT=30. Guzzle 8 rejects the string.
+    httpTimeoutsRegisterWith(httpTimeoutsOktaConfig(['connect_timeout' => '2.5', 'timeout' => '30']));
+
+    expect(httpTimeoutsDriverGuzzle())->toBe(['connect_timeout' => 2.5, 'timeout' => 30]);
 });
 
 it('prefers services.okta.guzzle over okta-oidc.http', function () {
@@ -157,6 +167,8 @@ it('falls back to the default rather than no limit for an unusable value', funct
     'infinite' => ['1e400'],
     'rounds to 0 ms' => ['0.0005'],
     'underflows to 0' => ['1e-999'],
+    'too large to count in milliseconds' => ['1e16'],
+    'far too large' => ['1e306'],
 ]);
 
 it('uses the defaults when okta-oidc.http is missing from a published config', function () {
