@@ -16,7 +16,7 @@ return [
 
     // Timeouts, in seconds, for the calls to Okta during sign-in (the token
     // exchange and the userinfo request). When one fires, the user lands on the
-    // sign-in failed page. 0 means no limit. Other Guzzle options (proxy, verify,
+    // sign-in failed page. 0 removes the limit. Other Guzzle options (proxy, verify,
     // handler) go in services.okta.guzzle, which also overrides these.
     'http' => [
         'connect_timeout' => env('OKTA_OIDC_CONNECT_TIMEOUT', 5),

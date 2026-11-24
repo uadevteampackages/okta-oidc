@@ -91,9 +91,12 @@ class OidcConfig
      * The Guzzle timeouts for the package's calls to Okta (token exchange and
      * userinfo), from okta-oidc.http.
      *
-     * A missing, null, negative or non-numeric value falls back to the package
-     * default rather than to no limit, so a typo in an env var cannot quietly turn
-     * timeouts off. 0 is passed through: it is Guzzle's own "no limit".
+     * A value that is missing, null, not a number, negative, infinite, or between
+     * 0 and 0.001 falls back to the package default rather than to no limit, so a
+     * typo in an env var cannot quietly turn timeouts off. Guzzle works in
+     * milliseconds: it rejects smaller values with an exception the callback does
+     * not catch, or rounds them to 0. 0 itself is passed through: it removes the
+     * limit.
      *
      * @return array{connect_timeout: int|float, timeout: int|float}
      */
@@ -109,10 +112,23 @@ class OidcConfig
     {
         $value = config("okta-oidc.http.{$key}");
 
-        if (! is_numeric($value) || $value < 0) {
+        if (! is_numeric($value)) {
             return $default;
         }
 
-        return $value + 0;
+        // Env values arrive as strings, and Guzzle 8 rejects numeric strings.
+        $seconds = $value + 0;
+
+        // Only a value written as zero removes the limit; '1e-999' also comes out
+        // as 0 but is a typo, not an opt-out.
+        if ($seconds == 0) {
+            return preg_match('/[1-9]/', (string) $value) ? $default : 0;
+        }
+
+        if (! is_finite($seconds) || $seconds < 0.001) {
+            return $default;
+        }
+
+        return $seconds;
     }
 }

@@ -88,12 +88,34 @@ class OktaOidcServiceProvider extends ServiceProvider
 
         $merged['guzzle'] = array_replace(
             OidcConfig::httpTimeouts(),
-            is_array($packageConfig['guzzle'] ?? null) ? $packageConfig['guzzle'] : [],
-            is_array($appConfig['guzzle'] ?? null) ? $appConfig['guzzle'] : [],
+            $this->guzzleOverrides($packageConfig['guzzle'] ?? null),
+            $this->guzzleOverrides($appConfig['guzzle'] ?? null),
         );
 
         config([
             'services.okta' => $merged,
         ]);
+    }
+
+    /**
+     * Guzzle options an app set, minus timeouts left null. An app writing
+     * 'timeout' => env('SOME_VAR') with the variable unset gets the default
+     * instead of no limit; 0 is still the way to remove a limit.
+     *
+     * @return array<array-key, mixed>
+     */
+    protected function guzzleOverrides(mixed $options): array
+    {
+        if (! is_array($options)) {
+            return [];
+        }
+
+        foreach (['connect_timeout', 'timeout'] as $key) {
+            if (array_key_exists($key, $options) && $options[$key] === null) {
+                unset($options[$key]);
+            }
+        }
+
+        return $options;
     }
 }

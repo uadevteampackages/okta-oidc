@@ -107,6 +107,37 @@ it('reads the defaults from okta-oidc.http', function () {
     expect(httpTimeoutsDriverGuzzle())->toBe(['connect_timeout' => 3, 'timeout' => 2.5]);
 });
 
+it('lets okta-oidc.http turn a timeout off with 0, as OKTA_OIDC_TIMEOUT=0 does', function () {
+    httpTimeoutsRegisterWith(httpTimeoutsOktaConfig(), ['connect_timeout' => '0', 'timeout' => 0]);
+
+    expect(OidcConfig::httpTimeouts())->toBe(['connect_timeout' => 0, 'timeout' => 0])
+        ->and(httpTimeoutsDriverGuzzle())->toBe(['connect_timeout' => 0, 'timeout' => 0]);
+});
+
+it('layers okta-oidc.http, then okta-oidc.okta.guzzle, then services.okta.guzzle', function () {
+    config()->set('okta-oidc.okta.guzzle', ['connect_timeout' => 4, 'timeout' => 20, 'proxy' => 'http://proxy.test:3128']);
+
+    httpTimeoutsRegisterWith(httpTimeoutsOktaConfig(['timeout' => 30]), ['connect_timeout' => 3, 'timeout' => 15]);
+
+    expect(httpTimeoutsDriverGuzzle())
+        ->toBe(['connect_timeout' => 4, 'timeout' => 30, 'proxy' => 'http://proxy.test:3128']);
+});
+
+it('ignores a non-array guzzle entry', function () {
+    config()->set('okta-oidc.okta.guzzle', 'not-an-array');
+
+    httpTimeoutsRegisterWith(httpTimeoutsOktaConfig() + ['guzzle' => null]);
+
+    expect(httpTimeoutsDriverGuzzle())->toBe(['connect_timeout' => 5, 'timeout' => 10]);
+});
+
+it('keeps the default when services.okta.guzzle sets a timeout to null', function () {
+    // e.g. 'timeout' => env('OKTA_TIMEOUT') with the variable unset.
+    httpTimeoutsRegisterWith(httpTimeoutsOktaConfig(['connect_timeout' => null, 'timeout' => null]));
+
+    expect(httpTimeoutsDriverGuzzle())->toBe(['connect_timeout' => 5, 'timeout' => 10]);
+});
+
 it('prefers services.okta.guzzle over okta-oidc.http', function () {
     httpTimeoutsRegisterWith(httpTimeoutsOktaConfig(['timeout' => 30]), ['timeout' => 20]);
 
@@ -123,12 +154,35 @@ it('falls back to the default rather than no limit for an unusable value', funct
     'empty string' => [''],
     'not a number' => ['10s'],
     'negative' => [-1],
+    'infinite' => ['1e400'],
+    'rounds to 0 ms' => ['0.0005'],
+    'underflows to 0' => ['1e-999'],
 ]);
 
 it('uses the defaults when okta-oidc.http is missing from a published config', function () {
     config()->set('okta-oidc.http', null);
 
     expect(OidcConfig::httpTimeouts())->toBe(['connect_timeout' => 5, 'timeout' => 10]);
+});
+
+it('reads the env timeouts for an app that published its config before okta-oidc.http existed', function () {
+    // An older published config/okta-oidc.php has no 'http' key. mergeConfigFrom
+    // fills in new top-level keys from the package file, env() calls included.
+    $published = config('okta-oidc');
+    unset($published['http']);
+    config()->set('okta-oidc', $published);
+
+    $_ENV['OKTA_OIDC_TIMEOUT'] = $_SERVER['OKTA_OIDC_TIMEOUT'] = '20';
+
+    try {
+        httpTimeoutsRegisterWith(['domain' => 'https://okta.example.com'] + httpTimeoutsOktaConfig());
+    } finally {
+        unset($_ENV['OKTA_OIDC_TIMEOUT'], $_SERVER['OKTA_OIDC_TIMEOUT']);
+    }
+
+    expect(config('okta-oidc.http'))->toBe(['connect_timeout' => 5, 'timeout' => '20'])
+        ->and(config('services.okta.domain'))->toBe('https://okta.example.com')
+        ->and(httpTimeoutsDriverGuzzle())->toBe(['connect_timeout' => 5, 'timeout' => 20]);
 });
 
 it('gives the same result when the merge runs twice', function () {

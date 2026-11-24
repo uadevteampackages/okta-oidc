@@ -90,8 +90,8 @@ The callback makes two calls to Okta: it exchanges the authorization code for a 
 fetches the user's profile. Each call gets a **5 second connect timeout** and a **10 second
 total timeout** by default, so a slow or hung Okta sends the user to the failed page instead
 of holding the request open until the web server or gateway gives up. The calls run one
-after the other, so at worst a user waits about 20 seconds before seeing the failed page. No
-configuration is needed.
+after the other, so with Guzzle's default cURL handler a user waits at most about 20 seconds
+before seeing the failed page. No configuration is needed.
 
 To change them, set these in `.env`:
 
@@ -100,8 +100,10 @@ OKTA_OIDC_CONNECT_TIMEOUT=5
 OKTA_OIDC_TIMEOUT=10
 ```
 
-`0` means no limit. A value that is empty, negative or not a number falls back to the
-default, so a typo cannot turn the timeouts off.
+`0` removes the package's limit, leaving Guzzle's own behaviour (on Guzzle 7 with cURL, that
+still means curl's 300 second connect limit). A value that is empty, not a number, negative,
+or below 0.001 falls back to the default, so a typo cannot turn the timeouts off. If your app
+caches its config (`php artisan config:cache`), rebuild the cache after changing these.
 
 Other Guzzle options, such as `proxy`, `verify` or a test `handler`, go in the `okta` entry
 of `config/services.php`. Options there are merged one by one over the defaults, and win
@@ -113,6 +115,9 @@ over the `.env` values above, so setting only a proxy keeps both timeouts:
     'guzzle' => ['proxy' => 'http://proxy.example.edu:3128'],
 ],
 ```
+
+A timeout set to `null` there (for example `env()` of a variable that is not set) is ignored,
+so the default applies; use `0` to remove a limit.
 
 If your app already sets `guzzle` timeouts in `config/services.php`, as earlier versions of
 this README told you to, they still apply and nothing needs to change. Make sure there is
@@ -419,8 +424,8 @@ Publish with `php artisan vendor:publish --tag=okta-oidc-config`.
 | `okta.client_secret` | `env('OKTA_CLIENT_SECRET')` | OAuth client secret |
 | `okta.redirect` | `env('OKTA_REDIRECT_URI')` | Callback URL |
 | `okta.auth_server_id` | `env('OKTA_AUTH_SERVER_ID')` | Auth server ID |
-| `http.connect_timeout` | `env('OKTA_OIDC_CONNECT_TIMEOUT', 5)` | Seconds to connect to Okta; `0` is no limit |
-| `http.timeout` | `env('OKTA_OIDC_TIMEOUT', 10)` | Seconds for each whole call to Okta; `0` is no limit |
+| `http.connect_timeout` | `env('OKTA_OIDC_CONNECT_TIMEOUT', 5)` | Seconds to connect to Okta; `0` removes the limit |
+| `http.timeout` | `env('OKTA_OIDC_TIMEOUT', 10)` | Seconds for each whole call to Okta; `0` removes the limit |
 | `routes.prefix` | `'auth/oidc'` | Route prefix |
 | `routes.middleware` | `['web']` | Route middleware |
 | `routes.name_prefix` | `'okta-oidc.'` | Route name prefix |
