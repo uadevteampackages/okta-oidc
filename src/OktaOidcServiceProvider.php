@@ -103,7 +103,7 @@ class OktaOidcServiceProvider extends ServiceProvider
      * leaves the default in place instead of removing the limit or failing every
      * sign-in, and a numeric string becomes a number, which Guzzle 8 requires. 0 is
      * still the way to remove a limit; a string such as '1e-999' that only comes out
-     * as 0 is left as it is, so Guzzle reports it instead of dropping the limit.
+     * as 0 is dropped so the default applies (Guzzle 7 would read it as no limit).
      *
      * @return array<array-key, mixed>
      */
@@ -123,7 +123,9 @@ class OktaOidcServiceProvider extends ServiceProvider
             } elseif (is_string($options[$key]) && is_numeric($options[$key])) {
                 $number = $options[$key] + 0;
 
-                if ($number != 0 || ! preg_match('/[1-9]/', $options[$key])) {
+                if ($number == 0 && preg_match('/[1-9]/', $options[$key])) {
+                    unset($options[$key]);
+                } else {
                     $options[$key] = $number;
                 }
             }

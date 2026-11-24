@@ -148,10 +148,10 @@ it('turns numeric string timeouts in services.okta.guzzle into numbers', functio
     expect(httpTimeoutsDriverGuzzle())->toBe(['connect_timeout' => 2.5, 'timeout' => 30]);
 });
 
-it('turns a zero string override into 0 but leaves an underflowing one for guzzle to reject', function () {
+it('turns a zero string override into 0 but keeps the default for one that only underflows to 0', function () {
     httpTimeoutsRegisterWith(httpTimeoutsOktaConfig(['connect_timeout' => '0', 'timeout' => '1e-999']));
 
-    expect(httpTimeoutsDriverGuzzle())->toBe(['connect_timeout' => 0, 'timeout' => '1e-999']);
+    expect(httpTimeoutsDriverGuzzle())->toBe(['connect_timeout' => 0, 'timeout' => 10]);
 });
 
 it('prefers services.okta.guzzle over okta-oidc.http', function () {
