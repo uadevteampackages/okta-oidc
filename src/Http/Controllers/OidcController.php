@@ -14,12 +14,16 @@ use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\AbstractProvider;
 use Laravel\Socialite\Two\InvalidStateException;
 use SocialiteProviders\Okta\Provider as OktaProvider;
+use Symfony\Component\HttpFoundation\Response;
 use Ua\LaravelOktaOidc\Contracts\PrincipalResolver;
 use Ua\LaravelOktaOidc\Contracts\UserBootstrapper;
+use Ua\LaravelOktaOidc\Http\Concerns\RespondsToInertia;
 use Ua\LaravelOktaOidc\Support\OidcConfig;
 
 class OidcController extends Controller
 {
+    use RespondsToInertia;
+
     public function login(Request $request): RedirectResponse
     {
         if ($request->filled('return_to') && $this->isSameHostUrl($request->string('return_to')->toString(), $request)) {
@@ -137,7 +141,7 @@ class OidcController extends Controller
         return redirect()->to($intendedUrl);
     }
 
-    public function logout(Request $request): RedirectResponse
+    public function logout(Request $request): Response
     {
         $idToken = $request->session()->get(OidcConfig::idTokenSessionKey());
         $postLogoutRedirect = OidcConfig::afterLogoutRedirect() ?: route(OidcConfig::routeName('logged-out'));
@@ -150,10 +154,18 @@ class OidcController extends Controller
             $driver = Socialite::driver(OidcConfig::driver());
             $logoutUrl = $driver->getLogoutUrl($idToken, $postLogoutRedirect);
 
-            return redirect()->away($logoutUrl);
+            // Inertia logs out with a background XHR. Following a cross-origin 302
+            // to Okta fails on CORS, so ask Inertia for a full browser visit.
+            return $this->isInertiaRequest($request)
+                ? $this->inertiaLocation($logoutUrl)
+                : redirect()->away($logoutUrl);
         }
 
-        return redirect()->to($postLogoutRedirect);
+        // The logged-out page is Blade, not an Inertia response, so an Inertia
+        // request needs a full visit here too.
+        return $this->isInertiaRequest($request)
+            ? $this->inertiaLocation(url($postLogoutRedirect))
+            : redirect()->to($postLogoutRedirect);
     }
 
     public function expired(): View

@@ -403,6 +403,8 @@ This prevents accidental form resubmission after session expiry.
 
 If you're using Inertia.js, the middleware automatically detects Inertia requests via the `X-Inertia` header and responds with HTTP `409` plus an `X-Inertia-Location` header. The Inertia client treats this as an external redirect and performs a full-page browser navigation — which is required to handle the redirect chain to Okta correctly. Detection is header-based, so the package does not depend on `inertiajs/inertia-laravel`.
 
+Logout handles Inertia requests the same way. An Inertia logout (for example `<Link href={logout.post()} as="button">`) is a background XHR, which cannot follow the cross-origin redirect to Okta's logout endpoint. So when the request has the `X-Inertia` header, `/auth/oidc/logout` still invalidates the session but responds `409` with `X-Inertia-Location` set to the Okta logout URL (federated logout) or to the post-logout redirect (the `logged-out` page or `redirects.after_logout`), and Inertia makes a full browser visit there. Non-Inertia logout still returns a normal redirect.
+
 ## Federated Logout
 
 By default, logging out clears the local session **and** redirects to Okta's logout endpoint to end the Okta session. This prevents users from being silently re-authenticated on the next visit.

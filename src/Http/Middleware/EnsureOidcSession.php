@@ -9,10 +9,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 use Ua\LaravelOktaOidc\Auth\OidcGuardUser;
+use Ua\LaravelOktaOidc\Http\Concerns\RespondsToInertia;
 use Ua\LaravelOktaOidc\Support\OidcConfig;
 
 class EnsureOidcSession
 {
+    use RespondsToInertia;
+
     public function handle(Request $request, Closure $next): Response
     {
         if ($this->hasValidSession($request)) {
@@ -88,17 +91,5 @@ class EnsureOidcSession
         }
 
         return now()->lt($expiresAt);
-    }
-
-    protected function isInertiaRequest(Request $request): bool
-    {
-        return $request->headers->has('X-Inertia');
-    }
-
-    protected function inertiaLocation(string $url): Response
-    {
-        return new Response('', Response::HTTP_CONFLICT, [
-            'X-Inertia-Location' => $url,
-        ]);
     }
 }
